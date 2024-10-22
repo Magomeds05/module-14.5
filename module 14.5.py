@@ -3,9 +3,11 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
-from crud_functions import get_all_products
+from crud_functions import get_all_products, is_included
+from crud_functions import add_user
 
-api = ""
+
+api = "8197570567:AAF2r-nMMyE_nqJ4Ll3dAHgXvzRn5kNVegw"
 bot = Bot(token=api)
 dp = Dispatcher(bot, storage=MemoryStorage())
 
@@ -19,7 +21,7 @@ class RegistrationState(StatesGroup):
     username = State()
     email = State()
     age = State()
-    balance = 1000
+    balance = State('1000')
 
 
 menu = ReplyKeyboardMarkup(keyboard=[
@@ -46,31 +48,18 @@ catalog_key = InlineKeyboardMarkup(
     ]
 )
 
-
-@dp.message_handler(text='Купить')
-async def get_buying_list(message):
-    for index, product in enumerate(get_all_products(1, 2, 3, 4)):
-        await message.answer(f'Название: Product{product} | Описание: описание {product} | Цена: {product * 100}')
-        with open(f'cart_for_med/img_{product}.webp', 'rb') as photo:
-            await message.answer_photo(photo)
-    await message.answer('Выберите продукт для покупки:', reply_markup=catalog_key)
-
-
-@dp.callback_query_handler(text='product_buying')
-async def send_confirm_message(call):
-    await call.message.answer('Вы успешно приобрели продукт!')
-
-
 @dp.message_handler(text='Регистрация')
 async def sing_up(message):
     await message.answer('Введите имя пользователя (только латинский алфавит):')
+    await RegistrationState.username.set()
 
 
 @dp.message_handler(state=RegistrationState.username)
 async def set_username(message, state):
-    await state.update_data(username=message.text)
-    if RegistrationState.username is None:
-        await message.answer("Введите свой email:")
+    if not is_included(message.text):
+        await state.update_data(username=message.text)
+        await message.answer('Введите свой email:')
+        await RegistrationState.email.set()
     else:
         await message.answer("Пользователь существует, введите другое имя.")
         await RegistrationState.username.set()
@@ -85,8 +74,29 @@ async def set_email(message, state):
 
 @dp.message_handler(state=RegistrationState.age)
 async def set_age(message, state):
-    await state.update_data(age=message.text)
-    await state.finish()
+    if 100 >= int(message.text) >= 0:
+        await state.update_data(age=message.text)
+        data = await state.get_data()
+        add_user(data['username'], data['email'], data['age'])
+        await message.answer('Регистрация прошла успешно')
+        await state.finish()
+    else:
+        await message.answer('Введите корректный взраст')
+        await RegistrationState.age.set()
+
+
+@dp.message_handler(text='Купить')
+async def get_buying_list(message):
+    for index, product in enumerate(get_all_products(1, 2, 3, 4)):
+        await message.answer(f'Название: Product{product} | Описание: описание {product} | Цена: {product * 100}')
+        with open(f'cart_for_med/img_{product}.webp', 'rb') as photo:
+            await message.answer_photo(photo)
+    await message.answer('Выберите продукт для покупки:', reply_markup=catalog_key)
+
+
+@dp.callback_query_handler(text='product_buying')
+async def send_confirm_message(call):
+    await call.message.answer('Вы успешно приобрели продукт!')
 
 
 @dp.message_handler(text='Рассчитать')
